@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+  <!--
+    No suppressions are active. Entries added here MUST carry a justification and an
+    expiry date; an empty file keeps the OWASP dependency-check gate honest by
+    failing the build on any CVSS >= 9 finding.
+  -->
+</suppressions>

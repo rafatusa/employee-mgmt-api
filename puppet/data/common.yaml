@@ -1,0 +1,7 @@
+---
+employee_api::app_port: 8080
+employee_api::container_name: 'employee-api'
+employee_api::app_root: '/opt/employee-api'
+employee_api::server_name: '_'
+employee_api::jwt_ttl_seconds: 3600
+employee_api::admin_username: 'admin'

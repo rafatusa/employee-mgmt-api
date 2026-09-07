@@ -1,0 +1,68 @@
+# Employee Management API — CI/CD pipeline (three independent workflows).
+#
+# Render:  d2 docs/cicd-pipeline.d2 docs/cicd-pipeline.svg
+
+direction: down
+
+infra_wf: "infrastructure.yml — provision AWS infrastructure" {
+  fmt: Terraform Format
+  validate: Terraform Validate
+  plan: Terraform Plan
+  apply: Terraform Apply
+  v_vpc: Verify VPC
+  v_sg: Verify Security Groups
+  v_ec2: Verify EC2 Instance
+  v_eip: Verify Elastic IP
+  v_rds: Verify RDS PostgreSQL
+  outputs: Generate Terraform Outputs
+
+  fmt -> validate -> plan -> apply
+  apply -> v_vpc -> v_sg -> v_ec2 -> v_eip -> v_rds -> outputs
+}
+
+build_wf: "build-deploy.yml — build, scan, containerize, deploy" {
+  build: Maven Build
+  checkstyle: Checkstyle
+  pmd: PMD
+  spotbugs: SpotBugs
+  tests: Unit Tests
+  jacoco: "JaCoCo Coverage (min 90%)"
+  semgrep: Semgrep SAST
+  deps: Dependency Vulnerability Scan
+  docker: Docker Build
+  trivy: Trivy Container Scan
+  push: Push Image to GHCR
+  puppet: Configure EC2 with Puppet
+  deploy: Deploy Docker Container
+  nginx: Configure Nginx Reverse Proxy
+  health: Verify Application Health
+
+  build -> checkstyle -> pmd -> spotbugs
+  spotbugs -> tests -> jacoco
+  spotbugs -> semgrep -> deps
+  jacoco -> docker
+  deps -> docker
+  docker -> trivy -> push -> puppet -> deploy -> nginx -> health
+}
+
+validate_wf: "validation.yml — post-deployment validation" {
+  smoke: Smoke Tests
+  functional: Functional API Tests
+  integration: Integration Tests
+  k6: "k6 Load Test (p95 < 500ms, errors < 1%)"
+  report: Generate HTML Test Report
+  publish: Publish Test Artifacts
+
+  smoke -> functional -> integration -> k6 -> report -> publish
+}
+
+infra_wf -> build_wf: "infrastructure must exist first" {
+  style.stroke-dash: 4
+}
+build_wf -> validate_wf: "application must be deployed first" {
+  style.stroke-dash: 4
+}
+
+note: "Each workflow is dispatched independently.\nThe dashed edges show the required ordering,\nnot an automatic trigger." {
+  shape: text
+}

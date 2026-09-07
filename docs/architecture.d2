@@ -1,0 +1,72 @@
+# Employee Management API — deployment architecture (full D2, rendered for docs).
+# The platform's source of truth is .udap/architecture.d2 (UDAP profile subset).
+#
+# Render:  d2 docs/architecture.d2 docs/architecture.svg
+
+direction: right
+
+client: API Client / Browser {
+  shape: person
+}
+
+github: GitHub {
+  shape: rectangle
+
+  actions: GitHub Actions {
+    shape: rectangle
+  }
+  ghcr: Container Registry (GHCR) {
+    shape: rectangle
+  }
+}
+
+aws: "AWS — us-east-1" {
+  style.stroke-dash: 3
+
+  vpc: "VPC 10.20.0.0/16" {
+    igw: Internet Gateway {
+      shape: rectangle
+    }
+
+    subnet_a: "Public subnet A — 10.20.1.0/24" {
+      ec2: "EC2 t3.small — Ubuntu 22.04" {
+        nginx: "Nginx :80\nreverse proxy" {
+          shape: rectangle
+        }
+        app: "Spring Boot 3.2 container\n127.0.0.1:8080" {
+          shape: rectangle
+        }
+      }
+    }
+
+    subnet_b: "Public subnet B — 10.20.2.0/24" {
+      rds: "RDS PostgreSQL 16\ndb.t3.micro" {
+        shape: cylinder
+      }
+    }
+  }
+
+  eip: Elastic IP {
+    shape: rectangle
+  }
+  iam: IAM instance role {
+    shape: rectangle
+  }
+  cw: "CloudWatch\nlogs + CPU alarm" {
+    shape: rectangle
+  }
+}
+
+client -> aws.eip: HTTP 80
+aws.eip -> aws.vpc.igw: static address
+aws.vpc.igw -> aws.vpc.subnet_a.ec2.nginx: routes :80
+aws.vpc.subnet_a.ec2.nginx -> aws.vpc.subnet_a.ec2.app: proxy_pass
+aws.vpc.subnet_a.ec2.app -> aws.vpc.subnet_b.rds: JDBC/TLS :5432 (app SG only)
+
+github.actions -> github.ghcr: push image (SHA tag)
+github.actions -> aws.vpc.subnet_a.ec2: Puppet apply over SSH
+github.actions -> aws.vpc: terraform apply
+aws.vpc.subnet_a.ec2.app -> github.ghcr: docker pull
+
+aws.iam -> aws.vpc.subnet_a.ec2: instance profile
+aws.vpc.subnet_a.ec2 -> aws.cw: logs + metrics

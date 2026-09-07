@@ -1,0 +1,12 @@
+---
+version: 5
+
+defaults:
+  datadir: /tmp/puppet/data
+  data_hash: yaml_data
+
+hierarchy:
+  - name: "Deployment values rendered by CI"
+    path: "deployment.yaml"
+  - name: "Common defaults"
+    path: "common.yaml"

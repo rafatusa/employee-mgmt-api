@@ -1,0 +1,14 @@
+.git
+.github
+.udap
+target
+infra
+puppet
+docs
+tests
+reports
+*.md
+.env
+.env.*
+!.env.example
+.mvn/wrapper/maven-wrapper.jar

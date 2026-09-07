@@ -1,0 +1,2 @@
+# Rendered at deploy time from CI secrets — must never be committed.
+data/deployment.yaml

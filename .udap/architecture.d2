@@ -1,0 +1,25 @@
+# udap:meta cloud=aws region=us-east-1 target=ec2-docker
+
+user: Developer / API Client { shape: person; udap-type: generic.user }
+ghcr: GitHub Container Registry { shape: rectangle; udap-type: generic.cdn }
+gha: GitHub Actions CI/CD { shape: rectangle; udap-type: generic.app }
+cw: CloudWatch Logs + CPU Alarm { shape: rectangle; udap-type: aws.cloudwatch }
+iam: IAM Instance Role { shape: rectangle; udap-type: aws.iam }
+eip: Elastic IP { shape: rectangle; udap-type: aws.eip }
+vpc: VPC 10.20.0.0/16 {
+  igw: Internet Gateway { shape: rectangle; udap-type: aws.igw }
+  nginx: Nginx Reverse Proxy :80 { shape: rectangle; udap-type: generic.app }
+  app: Spring Boot 3.2 API (Docker) :8080 { shape: rectangle; udap-type: aws.ec2 }
+  db: RDS PostgreSQL 16 :5432 { shape: cylinder; udap-type: aws.rds }
+}
+
+user -> vpc.igw: HTTP 80
+vpc.igw -> vpc.nginx: forward
+vpc.nginx -> vpc.app: proxy_pass 127.0.0.1:8080
+vpc.app -> vpc.db: JDBC TLS 5432
+eip -> vpc.igw: static public IP
+gha -> ghcr: push image (SHA tag)
+gha -> vpc.app: Puppet apply over SSH
+vpc.app -> ghcr: docker pull
+vpc.app -> cw: logs + metrics
+iam -> vpc.app: instance profile
