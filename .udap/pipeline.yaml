@@ -197,11 +197,23 @@ stages:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: bash puppet/render_hieradata.sh
+      # The destination MUST be removed first. `scp -r src dest` copies INTO dest
+      # when dest already exists, so on every rerun it created /tmp/puppet/puppet
+      # and silently left the stale manifests that --modulepath actually reads.
+      # That made Puppet fixes deploy green while never taking effect on the host.
       - name: Copy Puppet code to instance
         env:
           HOST: ${{ steps.tf.outputs.host }}
           SSH_USER: ${{ secrets.SSH_USER }}
-        run: scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet "$SSH_USER@$HOST:/tmp/puppet"
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST" 'rm -rf /tmp/puppet'
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet "$SSH_USER@$HOST:/tmp/puppet"
+      # Guard so the nesting regression can never return silently.
+      - name: Assert Puppet code was not nested
+        env:
+          HOST: ${{ steps.tf.outputs.host }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST" 'test ! -e /tmp/puppet/puppet && test -f /tmp/puppet/manifests/site.pp'
       - name: Install Puppet agent
         env:
           HOST: ${{ steps.tf.outputs.host }}
@@ -497,11 +509,24 @@ pipelines:
               DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
               JWT_SECRET: ${{ secrets.JWT_SECRET }}
             run: bash puppet/render_hieradata.sh
+          # The destination MUST be removed first. `scp -r src dest` copies INTO
+          # dest when dest already exists, so on every rerun it created
+          # /tmp/puppet/puppet and silently left the stale manifests that
+          # --modulepath actually reads. That made Puppet fixes deploy green
+          # while never taking effect on the host.
           - name: Copy Puppet code to instance
             env:
               HOST: ${{ steps.tf.outputs.host }}
               SSH_USER: ${{ secrets.SSH_USER }}
-            run: scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet "$SSH_USER@$HOST:/tmp/puppet"
+            run: |
+              ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST" 'rm -rf /tmp/puppet'
+              scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet "$SSH_USER@$HOST:/tmp/puppet"
+          # Guard so the nesting regression can never return silently.
+          - name: Assert Puppet code was not nested
+            env:
+              HOST: ${{ steps.tf.outputs.host }}
+              SSH_USER: ${{ secrets.SSH_USER }}
+            run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST" 'test ! -e /tmp/puppet/puppet && test -f /tmp/puppet/manifests/site.pp'
           - name: Install Puppet agent
             env:
               HOST: ${{ steps.tf.outputs.host }}

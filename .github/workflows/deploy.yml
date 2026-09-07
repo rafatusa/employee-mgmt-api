@@ -200,8 +200,18 @@ jobs:
         DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         JWT_SECRET: ${{ secrets.JWT_SECRET }}
     - name: Copy Puppet code to instance
-      run: scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet
-        "$SSH_USER@$HOST:/tmp/puppet"
+      run: 'ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST"
+        ''rm -rf /tmp/puppet''
+
+        scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -r puppet "$SSH_USER@$HOST:/tmp/puppet"
+
+        '
+      env:
+        HOST: ${{ steps.tf.outputs.host }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+    - name: Assert Puppet code was not nested
+      run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST"
+        'test ! -e /tmp/puppet/puppet && test -f /tmp/puppet/manifests/site.pp'
       env:
         HOST: ${{ steps.tf.outputs.host }}
         SSH_USER: ${{ secrets.SSH_USER }}
