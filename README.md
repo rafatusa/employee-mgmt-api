@@ -95,14 +95,14 @@ the live contract is served from the application itself:
 
 ## Deployment
 
-Three independent GitHub Actions workflows, each triggered manually from the
-Actions tab:
+Independent GitHub Actions workflows, each triggered manually from the Actions tab:
 
 | Workflow | Purpose |
 | --- | --- |
 | `infrastructure.yml` | Terraform fmt → validate → plan → apply, then verifies the VPC, security groups, EC2 instance, Elastic IP and RDS instance, and publishes a Terraform outputs report |
-| `build-deploy.yml` | Maven build, Checkstyle, PMD, SpotBugs, unit tests with a 90% JaCoCo gate, Semgrep SAST, OWASP dependency scan, Docker build, Trivy scan, push to GHCR, Puppet configuration of the EC2 host, container deployment, Nginx setup and a health check |
+| `build-deploy.yml` | Maven build, Checkstyle, PMD, SpotBugs, unit tests with a 90% JaCoCo gate, Semgrep SAST, Docker build, Trivy scan, push to GHCR, Puppet configuration of the EC2 host, container deployment, Nginx setup and a health check |
 | `validation.yml` | Smoke tests, functional and integration API tests, k6 load test with a p95 < 500 ms and error-rate < 1% budget, HTML report generation and artifact publication |
+| `dependency-scan.yml` | OWASP dependency-check across the dependency tree; fails on CVSS ≥ 9 and publishes the full HTML report |
 
 `deploy.yml` and `destroy.yml` are additionally rendered from the pipeline
 specification for the platform's own deploy and teardown actions.
@@ -130,9 +130,10 @@ Repository secrets consumed by the workflows: `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `PROJECT_NAME`, `TF_STATE_BUCKET`, `SSH_USER`,
 `SSH_PRIVATE_KEY`, `SSH_PUBLIC_KEY`, `DB_PASSWORD`, `JWT_SECRET`, `NVD_API_KEY`.
 
-> `NVD_API_KEY` is required by the OWASP dependency-check stage: the NVD no longer
-> serves unauthenticated bulk downloads, so the scan fails without one. Free keys are
-> issued at <https://nvd.nist.gov/developers/request-an-api-key>.
+> `NVD_API_KEY` is required by `dependency-scan.yml`: the NVD no longer serves
+> unauthenticated bulk downloads, so the scan cannot run without one. Free keys are
+> issued at <https://nvd.nist.gov/developers/request-an-api-key>, and must be
+> activated from the confirmation email before they work.
 
 ## Operations
 
@@ -142,15 +143,29 @@ credential rotation and teardown — are documented in
 
 ## Quality gates
 
-Every gate below fails the build rather than warning:
+Every gate below fails its run rather than warning. None of them are advisory.
+
+**Blocking a release** (run inside `build-deploy.yml`):
 
 * **Checkstyle** — import hygiene, braces, naming, line length
 * **PMD** — error-prone constructs and unused code
 * **SpotBugs** — bytecode analysis at maximum effort, high threshold
 * **JaCoCo** — minimum 90% line coverage across the bundle
 * **Semgrep** — Java and secret-detection rule packs
-* **OWASP dependency-check** — fails on CVSS ≥ 9
-* **Trivy** — fails on CRITICAL, fixable container vulnerabilities
+* **Trivy** — fails on CRITICAL, fixable vulnerabilities in the built image
+
+**Run separately** (`dependency-scan.yml`):
+
+* **OWASP dependency-check** — fails on any dependency at CVSS ≥ 9
+
+> Why dependency-check is a separate workflow: it must download the full NVD
+> feed on every run, so its result depends on the availability and rate limits of
+> an external service. Coupling a release to that made deployments fail for
+> reasons unrelated to the code. The check itself is unchanged — same CVSS ≥ 9
+> threshold, same failure behaviour — it simply no longer decides whether a
+> deployment can proceed. Vulnerabilities in the shipped artifact are still
+> blocked at release time by Trivy, which scans the actual container image.
+> Run `dependency-scan.yml` before any release you intend to promote.
 
 ## License
 

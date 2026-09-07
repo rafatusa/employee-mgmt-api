@@ -21,15 +21,9 @@ How to take this repository from a fresh clone to a running deployment on AWS.
 | `SSH_PUBLIC_KEY` | platform | Registered on the EC2 key pair by Terraform |
 | `DB_PASSWORD` | you | RDS master password — alphanumeric, at least 20 characters |
 | `JWT_SECRET` | you | JWT signing key — alphanumeric, at least 32 characters |
-| `NVD_API_KEY` | you | NVD API key for the OWASP dependency scan (see below) |
+| `NVD_API_KEY` | you | NVD API key for `dependency-scan.yml` (not needed to deploy) |
 
 `GITHUB_TOKEN` is supplied automatically by Actions and is used for GHCR authentication.
-
-> **`NVD_API_KEY` is required, not optional.** Since the NVD retired unauthenticated
-> bulk downloads, `dependency-check` fails with *"Error updating the NVD Data; the NVD
-> returned a 403 or 404 error"* when no key is present. Request a free key at
-> <https://nvd.nist.gov/developers/request-an-api-key> (issued by email in minutes) and
-> add it as a repository secret before running `build-deploy.yml`.
 
 > Generate `DB_PASSWORD` and `JWT_SECRET` as strictly alphanumeric values. Characters
 > such as `%`, `$`, `@`, `:` and `/` break JDBC URLs, shell interpolation and property
@@ -37,14 +31,16 @@ How to take this repository from a fresh clone to a running deployment on AWS.
 
 ## Deployment order
 
-The three workflows are independent and dispatched manually from the **Actions** tab.
-They must be run in this order the first time, because each depends on the previous
-one's result:
+The workflows are independent and dispatched manually from the **Actions** tab.
+The first three must be run in this order the first time, because each depends on
+the previous one's result:
 
 ```
 1. infrastructure.yml   →  creates the VPC, EC2, EIP and RDS instance
 2. build-deploy.yml     →  builds and ships the application onto that instance
 3. validation.yml       →  proves the deployed system behaves correctly
+
+   dependency-scan.yml  →  independent; run before promoting a release
 ```
 
 ### Step 1 — Provision infrastructure
@@ -62,7 +58,7 @@ and `apply`, then asserts against the AWS APIs that each resource really exists:
 Finally it publishes a `terraform-outputs` artifact containing the public IP and
 resource identifiers. Download it — the public IP is the application's address.
 
-Typical duration: 8–12 minutes, dominated by RDS creation.
+Typical duration: 10–12 minutes, dominated by RDS creation.
 
 ### Step 2 — Build and deploy the application
 
@@ -72,7 +68,7 @@ Run **build-deploy.yml**. Stages, in order:
 | --- | --- |
 | Maven build, Checkstyle, PMD, SpotBugs | No style, error-prone or bytecode findings |
 | Unit tests + JaCoCo | All tests green, line coverage ≥ 90% |
-| Semgrep SAST, OWASP dependency-check | No findings; no dependency at CVSS ≥ 9 |
+| Semgrep SAST | No blocking findings from the Java and secrets rule packs |
 | Docker build + Trivy | No fixable CRITICAL vulnerabilities in the image |
 | Push to GHCR | Image tagged with the commit SHA and `latest` |
 | Puppet configure | Docker engine, `.env`, systemd unit, Nginx vhost |
@@ -82,8 +78,7 @@ The Puppet run is idempotent: re-running the workflow converges the host rather
 than rebuilding it. The systemd unit `employee-api.service` owns the container
 lifecycle, so the application survives reboots.
 
-Typical duration: 10–15 minutes on a cold Maven cache; the first dependency-check
-run is slower because it populates the local NVD database.
+Typical duration: 10–15 minutes on a cold Maven cache.
 
 ### Step 3 — Validate the deployment
 
@@ -97,6 +92,23 @@ Run **validation.yml**. It verifies, against the live system:
 
 It publishes a `validation-reports` artifact containing an HTML summary of the
 performance budget plus the full functional test report.
+
+### Dependency vulnerability scanning
+
+Run **dependency-scan.yml** independently — before promoting a release, and on a
+regular cadence. It runs OWASP dependency-check across the whole dependency tree,
+**fails on any dependency at CVSS ≥ 9**, and publishes `dependency-check-report`
+as an HTML artifact.
+
+It is deliberately not part of `build-deploy.yml`. dependency-check downloads the
+full National Vulnerability Database feed on every run, so its outcome depends on
+an external service's availability and rate limits — coupling releases to that
+made deployments fail for reasons unrelated to the code. The check itself is
+unchanged; it simply no longer decides whether a deployment can proceed.
+Vulnerabilities in the shipped artifact are still blocked at release time by
+Trivy, which scans the actual container image inside `build-deploy.yml`.
+
+The first run populates a local NVD database and is slow (10–30 minutes).
 
 ## Verifying by hand
 
@@ -150,7 +162,7 @@ take a manual snapshot first if the data matters.
 | --- | --- |
 | `terraform init` fails on the backend | `TF_STATE_BUCKET` or `PROJECT_NAME` is missing; check repository secrets |
 | Provision fails with a duplicate resource | Backend init flags drifted; confirm `-reconfigure` and the state key, do not import by hand |
-| `Error updating the NVD Data ... 403 or 404` | `NVD_API_KEY` is missing or invalid — the scan cannot run unauthenticated |
+| `Error updating the NVD Data ... 403 or 404` | In `dependency-scan.yml`: the `NVD_API_KEY` is missing, not yet activated from the confirmation email, or rate-limited — raise `nvdApiDelay` in `pom.xml` |
 | `Permission denied (publickey)` | `SSH_USER` must be `ubuntu` for the Ubuntu 22.04 AMI; if key material mismatches, rotate the project keys from the platform |
 | Puppet fails on `apt` 404s | Stale package index on a fresh host; the manifests retry `apt-get update`, re-run the workflow |
 | Health check times out | Container still starting or cannot reach RDS; see the operations guide for log commands |

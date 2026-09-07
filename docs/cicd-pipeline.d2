@@ -1,4 +1,4 @@
-# Employee Management API — CI/CD pipeline (three independent workflows).
+# Employee Management API — CI/CD pipeline (independent workflows).
 #
 # Render:  d2 docs/cicd-pipeline.d2 docs/cicd-pipeline.svg
 
@@ -28,9 +28,8 @@ build_wf: "build-deploy.yml — build, scan, containerize, deploy" {
   tests: Unit Tests
   jacoco: "JaCoCo Coverage (min 90%)"
   semgrep: Semgrep SAST
-  deps: Dependency Vulnerability Scan
   docker: Docker Build
-  trivy: Trivy Container Scan
+  trivy: "Trivy Container Scan (blocks CRITICAL)"
   push: Push Image to GHCR
   puppet: Configure EC2 with Puppet
   deploy: Deploy Docker Container
@@ -39,9 +38,9 @@ build_wf: "build-deploy.yml — build, scan, containerize, deploy" {
 
   build -> checkstyle -> pmd -> spotbugs
   spotbugs -> tests -> jacoco
-  spotbugs -> semgrep -> deps
+  spotbugs -> semgrep
   jacoco -> docker
-  deps -> docker
+  semgrep -> docker
   docker -> trivy -> push -> puppet -> deploy -> nginx -> health
 }
 
@@ -56,6 +55,13 @@ validate_wf: "validation.yml — post-deployment validation" {
   smoke -> functional -> integration -> k6 -> report -> publish
 }
 
+dep_wf: "dependency-scan.yml — dependency CVE scanning" {
+  owasp: "OWASP dependency-check (fails on CVSS >= 9)"
+  artifact: Publish HTML Report
+
+  owasp -> artifact
+}
+
 infra_wf -> build_wf: "infrastructure must exist first" {
   style.stroke-dash: 4
 }
@@ -63,6 +69,6 @@ build_wf -> validate_wf: "application must be deployed first" {
   style.stroke-dash: 4
 }
 
-note: "Each workflow is dispatched independently.\nThe dashed edges show the required ordering,\nnot an automatic trigger." {
+note: "Each workflow is dispatched independently.\nDashed edges show required ordering, not automatic triggers.\n\ndependency-scan runs on its own so that NVD API availability\nnever blocks a release. Artifact CVEs are still blocked at\nrelease time by Trivy inside build-deploy." {
   shape: text
 }
