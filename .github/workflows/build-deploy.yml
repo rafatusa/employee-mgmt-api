@@ -61,6 +61,7 @@ jobs:
     - sast
     env:
       IMAGE: ghcr.io/${{ github.repository }}
+      TRIVY_VERSION: v0.74.0
     timeout-minutes: 35
     steps:
     - uses: actions/checkout@v4
@@ -81,11 +82,11 @@ jobs:
         docker build -t "$IMAGE_LC:${{ github.sha }}" -t "$IMAGE_LC:latest" .
 
         '
-    - name: Trivy container scan
+    - name: Install Trivy
+      run: "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh\
+        \ \\\n  | sh -s -- -b /usr/local/bin \"$TRIVY_VERSION\"\ntrivy --version\n"
+    - name: Trivy container scan (fails on fixable CRITICAL)
       run: 'IMAGE_LC="$(echo "$IMAGE" | tr ''[:upper:]'' ''[:lower:]'')"
-
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh
-        | sh -s -- -b /usr/local/bin v0.55.2
 
         trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE_LC:${{
         github.sha }}"

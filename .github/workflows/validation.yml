@@ -110,6 +110,8 @@ jobs:
 
         sudo install /tmp/k6-v0.53.0-linux-amd64/k6 /usr/local/bin/k6
 
+        k6 version
+
         '
     - name: k6 load test (p95 under 500ms, error rate under 1 percent)
       run: 'mkdir -p reports
