@@ -12,8 +12,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * Aligns the seeded administrator account with the password supplied through the
- * environment so that no usable credential is ever committed to the repository.
+ * Sets the administrator password from the environment on every start.
+ *
+ * <p>The V2 migration seeds the administrator row with an unusable placeholder
+ * rather than a real hash, so that no credential material is ever committed to
+ * version control. This runner turns that locked row into a working account
+ * using the supplied ADMIN_PASSWORD.
  */
 @Component
 @Profile("!test")
@@ -40,7 +44,9 @@ public class AdminAccountInitializer implements ApplicationRunner {
     @Override
     public void run(final ApplicationArguments args) {
         if (adminPassword == null || adminPassword.isBlank()) {
-            LOG.warn("app.admin.password is not set; leaving the seeded administrator hash untouched");
+            LOG.warn("ADMIN_PASSWORD is not set: the '{}' account keeps its unusable placeholder "
+                    + "hash and CANNOT be authenticated against. Set ADMIN_PASSWORD and restart "
+                    + "to enable administrator login.", adminUsername);
             return;
         }
         final AppUser user = users.findByUsername(adminUsername).orElseGet(() -> {
