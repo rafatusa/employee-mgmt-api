@@ -9,7 +9,7 @@ eip: Elastic IP { shape: rectangle; udap-type: aws.eip }
 vpc: VPC 10.20.0.0/16 {
   igw: Internet Gateway { shape: rectangle; udap-type: aws.igw }
   nginx: Nginx Reverse Proxy :80 { shape: rectangle; udap-type: generic.app }
-  app: Spring Boot 3.2 API (Docker) :8080 { shape: rectangle; udap-type: aws.ec2 }
+  app: Spring Boot 3.5 API (Docker) :8080 { shape: rectangle; udap-type: aws.ec2 }
   db: RDS PostgreSQL 16 :5432 { shape: cylinder; udap-type: aws.rds }
 }
 

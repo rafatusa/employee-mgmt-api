@@ -1,12 +1,19 @@
 # Employee Management API
 
-Production-grade REST API for managing employee records, built with Spring Boot 3.2
+Production-grade REST API for managing employee records, built with Spring Boot 3.5
 on Java 21 and deployed to AWS EC2 as a Docker container behind an Nginx reverse
 proxy, with PostgreSQL on Amazon RDS.
 
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)](https://www.postgresql.org/)
+
+> **Framework version note.** This project was specified against Spring Boot 3.2 and
+> initially built on 3.2.11. The 3.2.x line left OSS support in 2024, and its
+> dependency tree carries fixable CRITICAL CVEs that the Trivy image gate correctly
+> refused to ship. It now targets **Spring Boot 3.5.16**, the current supported 3.x
+> release. The upgrade required no application code changes; only the Flyway
+> PostgreSQL module had to be declared explicitly (see below).
 
 ## What it does
 
@@ -54,6 +61,18 @@ docs/                              Deployment guide, operations guide, API refer
 config/                            Checkstyle, PMD, SpotBugs, dependency-check configuration
 .udap/pipeline.yaml                Pipeline specification — the CI workflows are rendered from it
 ```
+
+### Dependency notes
+
+* **Flyway 10+** (pulled in by Boot 3.5) moved database-specific support into separate
+  modules, so `flyway-database-postgresql` is declared explicitly. Without it the
+  application starts and then fails with *"Unsupported Database: PostgreSQL"*.
+* **springdoc-openapi 2.8.x** is the line that targets Spring Boot 3.x; the 3.x
+  springdoc releases target Spring Boot 4.
+* **Base images float on their minor tag** (`eclipse-temurin:21-jre-noble`,
+  `maven:3-eclipse-temurin-21`) rather than a hard patch pin. A pinned patch version
+  goes stale between releases and reintroduces CVEs; the Trivy gate re-verifies the
+  resulting image on every build, so currency is enforced rather than assumed.
 
 ## Running locally
 
