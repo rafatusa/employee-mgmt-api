@@ -1,12 +1,27 @@
 # Security Notes
 
-## Open finding: embedded Tomcat CVEs block the release gate
+## ACCEPTED RISK: three embedded Tomcat CVEs are suppressed to allow deployment
 
-**Status: unresolved. The application is intentionally NOT deployed.**
+**Status: knowingly shipped with a scoped, time-limited exception.**
 
-The Trivy container gate in `build-deploy.yml` blocks the image, and it is correct
-to do so. The full report is published on every run as the `trivy-report` artifact
-(table and JSON) and echoed into the run summary.
+> This section documents a deliberate decision to deploy with three known CRITICAL
+> vulnerabilities. It is recorded here so nobody discovers it by accident, and so
+> the exception can be removed the moment upstream makes that possible.
+
+### The decision
+
+| | |
+| --- | --- |
+| **Accepted by** | Project owner, explicitly, during the build session |
+| **Date accepted** | 2026-09-07 |
+| **Recommendation given** | Against acceptance — waiting for the upstream fix was advised |
+| **Mechanism** | `.trivyignore` at the repository root, three CVE IDs, with `exp:` dates |
+| **Expires** | 2026-12-07 — after which the gate re-arms automatically |
+| **Exit condition** | Tomcat >= 10.1.58 available in Maven Central; delete `.trivyignore` |
+
+The owner asked to proceed to deployment and fix the vulnerability once the fixed
+artifact is published. The exception was implemented in the narrowest form that
+achieves that.
 
 ### What the scan found
 
@@ -25,62 +40,84 @@ org.apache.tomcat.embed:tomcat-embed-core
 ```
 
 All three are in the embedded servlet container that fronts this API, and all three
-are authentication or access-control **bypasses**. For a JWT-secured employee record
-system, shipping these would be a material risk, not a paperwork item.
+are authentication or access-control **bypasses**. This is a material risk on a
+JWT-secured employee record system, not a paperwork item.
 
-### Why it is not fixed yet
+### Why the fix cannot simply be applied
 
 `tomcat-embed-core` is a transitive dependency of `spring-boot-starter-web`. Spring
 Boot 3.5.16 — the current supported 3.x release — manages version **10.1.55**.
 
 The normal remedy is Spring Boot's `tomcat.version` property, which re-points every
-managed `tomcat-embed-*` artifact at once. That was attempted and reverted, because:
+managed `tomcat-embed-*` artifact at once. It was attempted and reverted:
 
 ```
 Could not find artifact org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.58
   in central (https://repo.maven.apache.org/maven2)
 ```
 
-Tomcat **10.1.58 is tagged** in the Apache Tomcat repository but has **not yet been
-published to Maven Central**. Publication lags tagging, typically by days. Pinning a
-version that does not resolve breaks the build for everyone, so the override is left
-out and the finding is documented instead of hidden.
+Tomcat **10.1.58 is tagged** in the Apache Tomcat source repository but has **not
+been published to Maven Central**. Publication lags tagging, typically by days.
+10.1.57 is available but sits below the fixed version and does not remediate.
 
-10.1.57 is tagged as well, but it is below the fixed version Trivy names and would
-not remediate the CVEs.
+Verified again on 2026-09-07: still 404 on Maven Central. Latest Spring Boot release
+is 4.1.1 (a major version, out of scope for this project's 3.x line).
 
-### How to resolve it
+### Compensating controls
+
+These reduce, but do **not** eliminate, the exposure:
+
+* The application uses a **stateless JWT filter**; DIGEST and FORM authentication
+  are not enabled, which is the attack surface two of the three CVEs target.
+* Nginx terminates and proxies all traffic; the container is not directly exposed.
+* The RDS instance is **not publicly accessible**; port 5432 is reachable only from
+  the application security group (`IpRanges` empty — verified against the AWS API).
+* The application container runs as a non-root user.
+
+Treat this deployment as time-boxed. Do not extend the expiry without a fresh
+decision.
+
+### How to remove the exception
 
 Once `tomcat-embed-core` 10.1.58 (or later) is available in Maven Central:
 
-1. Add to `pom.xml` `<properties>`:
+1. Add to `pom.xml` `<properties>` (the comment block is already in place there):
    ```xml
    <tomcat.version>10.1.58</tomcat.version>
    ```
 2. Run `mvn -B -ntp verify` locally to confirm the dependency resolves.
-3. Dispatch `build-deploy.yml`.
-4. Download the `trivy-report` artifact and confirm `app/app.jar` reports
+3. **Delete `.trivyignore` entirely.**
+4. Dispatch `build-deploy.yml`.
+5. Download the `trivy-report` artifact and confirm `app/app.jar` reports
    0 vulnerabilities.
-5. Remove the override once a Spring Boot release manages >= 10.1.58 natively,
-   re-verifying with the same artifact.
 
-Alternatively, upgrading to a future Spring Boot patch release that manages
->= 10.1.58 resolves it with no override at all. Check the Boot release notes for
-the managed Tomcat version before upgrading.
+Check here for publication:
+<https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/>
 
-### What was explicitly NOT done
+A future Spring Boot 3.5.x patch that manages >= 10.1.58 resolves it with no
+override at all, which is preferable.
 
-None of the following were used to make the pipeline green, and none should be:
+### What the exception does NOT do
 
-* `.trivyignore` or any per-CVE suppression
+The suppression is deliberately narrow. Still fully in force:
+
+* The Trivy gate still runs `--exit-code 1 --severity CRITICAL --ignore-unfixed`.
+  **Any other fixable CRITICAL — OS or Java — still fails the build.**
+* The scan report is still generated and published as the `trivy-report` artifact
+  and echoed into the run summary, so findings remain visible.
+* Semgrep (`p/java`, `p/secrets`) still blocks the release.
+* OWASP dependency-check still fails `dependency-scan.yml` at CVSS >= 9.
+
+Explicitly **not** used, and not to be used:
+
+* `continue-on-error` on any step
 * lowering the gate from `--severity CRITICAL`
 * `--exit-code 0` on the scan
-* `continue-on-error` on the step
 * deleting or skipping the scan
+* a blanket or wildcard ignore entry
 
-The gate did its job: it found three real authentication bypasses in a dependency
-and refused to ship them. Silencing it would have produced a green pipeline and a
-vulnerable deployment.
+The difference matters: a scoped ignore with an expiry is an auditable, reversible
+risk acceptance. The items above are silent holes.
 
 ## Resolved findings (kept for context)
 
@@ -95,7 +132,7 @@ vulnerable deployment.
 | Scanner | Scope | Where it runs | Blocking? |
 | --- | --- | --- | --- |
 | Semgrep | Source code, secret detection | `build-deploy.yml` | Yes |
-| Trivy | Built container image: OS packages + bundled JARs | `build-deploy.yml` | Yes |
+| Trivy | Built container image: OS packages + bundled JARs | `build-deploy.yml` | Yes, except the three CVEs above |
 | OWASP dependency-check | Declared dependency tree | `dependency-scan.yml` | Fails that workflow; does not gate releases |
 
 Trivy is the release-blocking dependency check because it scans the artifact that

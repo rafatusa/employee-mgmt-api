@@ -1,0 +1,53 @@
+# Trivy vulnerability exceptions — SCOPED, TIME-LIMITED, RECORDED.
+#
+# This file suppresses THREE specific CVE IDs and nothing else. The Trivy gate
+# is otherwise unchanged: it still runs with
+#     --exit-code 1 --severity CRITICAL --ignore-unfixed
+# so any other fixable CRITICAL vulnerability — in the OS layer or in any Java
+# dependency — still fails the build and blocks the release.
+#
+# WHAT IS ACCEPTED AND WHY
+# ------------------------
+# Component : org.apache.tomcat.embed:tomcat-embed-core
+# Installed : 10.1.55  (managed transitively by spring-boot-starter-web 3.5.16)
+# Fixed in  : 10.1.58
+#
+# The fix cannot currently be applied. Tomcat 10.1.58 is TAGGED in the Apache
+# source repository but has NOT been published to Maven Central, so overriding
+# Spring Boot's <tomcat.version> property fails the build outright with:
+#     Could not find artifact org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.58
+# 10.1.57 is available but sits below the fixed version and does not remediate.
+#
+# RISK ACCEPTED BY: the project owner, explicitly, in the build session, after
+# being shown the three CVEs and their impact, and after being advised against
+# it. This is a deliberate business decision to ship ahead of the upstream
+# release, not an oversight and not a silenced false positive.
+#
+# RESIDUAL RISK: all three are authentication / access-control bypasses in the
+# servlet container that fronts this JWT-secured API. Compensating controls in
+# place: the app does not enable DIGEST or FORM authentication (it uses a
+# stateless JWT filter), Nginx fronts the container, the RDS instance is not
+# publicly accessible, and 5432 is reachable only from the app security group.
+# These reduce but DO NOT eliminate the exposure.
+#
+# EXIT CONDITION — remove this file entirely:
+#   1. Check https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/
+#      for 10.1.58 (or a Spring Boot 3.5.x patch that manages >= 10.1.58).
+#   2. Set <tomcat.version>10.1.58</tomcat.version> in pom.xml (comment block
+#      is already in place at that spot), or bump Spring Boot.
+#   3. Delete this file. Re-run build-deploy.yml and confirm the trivy-report
+#      artifact shows app/app.jar with 0 vulnerabilities.
+#
+# The expiry dates below re-arm the gate automatically: once passed, Trivy stops
+# honouring these entries and the build fails again. That is intentional — this
+# exception must not rot silently into a permanent hole.
+# See docs/security-notes.md for the full record.
+
+# Security constraint bypass due to improper access control
+CVE-2026-65182 exp:2026-12-07
+
+# Authentication bypass via limited replay attack in the DIGEST authenticator
+CVE-2026-65905 exp:2026-12-07
+
+# Unauthorized resource access via FORM authentication bypass
+CVE-2026-68525 exp:2026-12-07
