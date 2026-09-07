@@ -4,12 +4,15 @@
 # Every value written here is read from the environment: repository secrets and
 # terraform outputs. No literal credential exists in this file. The rendered
 # output is git-ignored and lives only on the runner and the target host.
+#
+# NOTE: no registry credential is rendered. The application image is published
+# to a PUBLIC GHCR package and the host pulls it anonymously. Passing the CI
+# job's GITHUB_TOKEN through to the instance cannot work — it is job-scoped and
+# expires when the job ends, so a later container restart would fail to pull.
 set -euo pipefail
 
 : "${IMAGE_REF:?IMAGE_REF must be set}"
 : "${IMAGE_TAG:?IMAGE_TAG must be set}"
-: "${GHCR_USER:?GHCR_USER must be set}"
-: "${GHCR_TOKEN:?GHCR_TOKEN must be set}"
 : "${DB_PASSWORD:?DB_PASSWORD must be set}"
 : "${JWT_SECRET:?JWT_SECRET must be set}"
 
@@ -46,8 +49,6 @@ printf -- '---\n' > "${OUTPUT}"
 chmod 600 "${OUTPUT}"
 
 emit image            "${IMAGE_REF_LOWER}:${IMAGE_TAG}"
-emit registry_username "${GHCR_USER}"
-emit registry_password "${GHCR_TOKEN}"
 emit db_host          "${DB_HOST}"
 emit db_name          "${DB_NAME}"
 emit db_username      "${DB_USERNAME}"

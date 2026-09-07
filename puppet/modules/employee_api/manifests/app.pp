@@ -1,5 +1,9 @@
-# Deploys the application container: environment file, registry credentials,
-# image pull and a systemd unit that owns the container lifecycle.
+# Deploys the application container: environment file, image pull and a systemd
+# unit that owns the container lifecycle.
+#
+# The image is published to a PUBLIC GHCR package, so the host pulls it
+# anonymously and holds no registry credential at all. See the registry_*
+# parameters in init.pp for why an authenticated pull is deliberately absent.
 class employee_api::app {
 
   $app_root       = $employee_api::app_root
@@ -46,34 +50,15 @@ class employee_api::app {
     require => File[$app_root],
   }
 
-  # Registry credentials are written to a root-only file and consumed via stdin,
-  # so the token never appears in the process table or in Puppet's log output.
-  file { "${app_root}/registry-token":
-    ensure    => file,
-    owner     => 'root',
-    group     => 'root',
-    mode      => '0600',
-    show_diff => false,
-    content   => Sensitive("${employee_api::registry_password.unwrap}\n"),
-    require   => File[$app_root],
-  }
-
-  exec { 'ghcr-login':
-    command     => "/bin/cat ${app_root}/registry-token | /usr/bin/docker login ghcr.io -u '${employee_api::registry_username}' --password-stdin",
-    provider    => shell,
-    logoutput   => false,
-    timeout     => 120,
-    environment => ['HOME=/root'],
-    require     => File["${app_root}/registry-token"],
-  }
-
+  # The package is public: no `docker login` and no credential on disk. The pull
+  # is retried because GHCR occasionally rate-limits anonymous requests.
   exec { 'pull-application-image':
     command   => "/usr/bin/docker pull ${image}",
     unless    => "/usr/bin/docker image inspect ${image}",
     timeout   => 900,
     tries     => 3,
     try_sleep => 20,
-    require   => Exec['ghcr-login'],
+    require   => File[$app_root],
   }
 
   file { '/etc/systemd/system/employee-api.service':

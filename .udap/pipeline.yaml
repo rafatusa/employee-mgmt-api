@@ -187,12 +187,13 @@ stages:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+      # No GHCR credential is rendered: the image is a PUBLIC package and the
+      # host pulls it anonymously. GITHUB_TOKEN is job-scoped and expires with
+      # the run, so replaying it on the instance breaks later restarts.
       - name: Render Puppet hieradata
         env:
           IMAGE_REF: ghcr.io/${{ github.repository }}
           IMAGE_TAG: ${{ github.sha }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: bash puppet/render_hieradata.sh
@@ -486,12 +487,13 @@ pipelines:
               printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
               chmod 600 ~/.ssh/deploy_key
               ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          # No GHCR credential is rendered: the image is a PUBLIC package and the
+          # host pulls it anonymously. GITHUB_TOKEN is job-scoped and expires with
+          # the run, so replaying it on the instance breaks later restarts.
           - name: Render Puppet hieradata
             env:
               IMAGE_REF: ghcr.io/${{ github.repository }}
               IMAGE_TAG: ${{ github.sha }}
-              GHCR_USER: ${{ github.actor }}
-              GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
               JWT_SECRET: ${{ secrets.JWT_SECRET }}
             run: bash puppet/render_hieradata.sh

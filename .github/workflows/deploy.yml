@@ -197,8 +197,6 @@ jobs:
       env:
         IMAGE_REF: ghcr.io/${{ github.repository }}
         IMAGE_TAG: ${{ github.sha }}
-        GHCR_USER: ${{ github.actor }}
-        GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         JWT_SECRET: ${{ secrets.JWT_SECRET }}
     - name: Copy Puppet code to instance

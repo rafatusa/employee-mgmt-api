@@ -3,10 +3,15 @@
 #
 # All data comes from Hiera (puppet/data/*.yaml); deployment.yaml is rendered by
 # CI from repository secrets and is never committed.
+#
+# There are deliberately NO registry credentials here. The application image is
+# published to a PUBLIC GHCR package, so the host pulls it anonymously. The
+# earlier design passed the CI job's GITHUB_TOKEN through to the instance, which
+# cannot work: that credential is job-scoped and expires when the job ends, so a
+# container restart or reboot would later fail to pull with no CI run in flight.
+# A public image removes the credential, the file on disk and the expiry.
 class employee_api (
   String  $image,
-  String  $registry_username,
-  Sensitive[String] $registry_password,
   String  $db_host,
   Integer $db_port,
   String  $db_name,
