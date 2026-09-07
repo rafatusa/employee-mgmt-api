@@ -28,8 +28,17 @@ curl --fail --silent --show-error --retry 20 --retry-delay 15 --retry-all-errors
 check "health endpoint returns UP" \
   bash -c "curl --fail --silent '${BASE_URL}/actuator/health' | grep -q '\"status\":\"UP\"'"
 
-check "database component reports UP" \
-  bash -c "curl --fail --silent '${BASE_URL}/actuator/health/db' | grep -q '\"status\":\"UP\"'"
+# The health endpoint runs with show-details=when_authorized, so component
+# detail (and /actuator/health/db) is deliberately not exposed publicly.
+# Database connectivity is instead proven through behaviour: authenticating an
+# unknown user forces a lookup against the users table. A reachable database
+# answers "no such user" -> 401. An unreachable datasource cannot answer at all
+# and Spring returns 500, so this assertion fails exactly when the DB is down.
+check "database is reachable (login performs a real user lookup)" \
+  bash -c "test \"\$(curl --silent -o /dev/null -w '%{http_code}' \
+    -X POST '${BASE_URL}/api/v1/auth/login' \
+    -H 'Content-Type: application/json' \
+    -d '{\"username\":\"smoke-probe-nonexistent\",\"password\":\"invalid\"}')\" = '401'"
 
 check "landing page is served" \
   bash -c "curl --fail --silent '${BASE_URL}/' | grep -qi 'Employee Management API'"
