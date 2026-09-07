@@ -40,6 +40,17 @@ class employee_api::app {
     require   => File[$app_root],
   }
 
+  # Earlier revisions wrote a GHCR credential here so the host could
+  # `docker login` before pulling. That credential was the CI job's
+  # GITHUB_TOKEN: job-scoped, already expired by the time the container
+  # restarted, and unnecessary now the package is public. Declaring it absent
+  # removes the stale secret from hosts provisioned by those revisions instead
+  # of leaving an expired token at rest on disk.
+  file { "${app_root}/registry-token":
+    ensure  => absent,
+    require => File[$app_root],
+  }
+
   # Records the image reference so systemd and subsequent runs agree on it.
   file { "${app_root}/image":
     ensure  => file,
