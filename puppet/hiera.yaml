@@ -5,6 +5,10 @@ defaults:
   datadir: /tmp/puppet/data
   data_hash: yaml_data
 
+# NOTE: lookup_options is NOT valid here. Hiera 5 rejects it as an unrecognized
+# key in the configuration file ("The Lookup Configuration ... has wrong type").
+# It belongs in a DATA file — see data/common.yaml, where the credential keys
+# are converted to Sensitive.
 hierarchy:
   - name: "Deployment values rendered by CI"
     path: "deployment.yaml"

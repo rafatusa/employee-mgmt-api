@@ -1,4 +1,29 @@
 ---
+# The employee_api class declares its four credential parameters as
+# Sensitive[String] so Puppet redacts them from logs, reports and file diffs,
+# and app.pp calls .unwrap at the point of use.
+#
+# Hiera does NOT infer Sensitive from YAML: deployment.yaml is rendered by CI as
+# ordinary quoted scalars, so every one of those keys arrives as a plain String
+# and the class fails type-checking before a single resource is applied:
+#
+#   parameter 'db_password' expects a Sensitive[String] value, got String
+#
+# convert_to performs the coercion in the data layer — the one place all four
+# values flow through. The class keeps its strong type and render_hieradata.sh
+# stays a plain shell script with no Puppet-specific syntax embedded in it.
+#
+# lookup_options must live in a DATA file; Hiera 5 rejects it inside hiera.yaml.
+lookup_options:
+  employee_api::registry_password:
+    convert_to: "Sensitive"
+  employee_api::db_password:
+    convert_to: "Sensitive"
+  employee_api::jwt_secret:
+    convert_to: "Sensitive"
+  employee_api::admin_password:
+    convert_to: "Sensitive"
+
 employee_api::app_port: 8080
 employee_api::container_name: 'employee-api'
 employee_api::app_root: '/opt/employee-api'
