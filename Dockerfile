@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # ---- build stage -------------------------------------------------------------
-FROM maven:3.9.9-eclipse-temurin-21 AS build
+# Toolchain only. Nothing from this stage ships, so it tracks the current Maven
+# release rather than a hard pin.
+FROM maven:3-eclipse-temurin-21 AS build
 WORKDIR /workspace
 
 COPY pom.xml ./
@@ -12,7 +14,15 @@ RUN mvn -B -ntp -DskipTests -Dcheckstyle.skip=true -Dpmd.skip=true -Dspotbugs.sk
     && cp target/employee-mgmt-api-1.0.0.jar /workspace/app.jar
 
 # ---- runtime stage -----------------------------------------------------------
-FROM eclipse-temurin:21.0.5_11-jre-jammy
+# This is the layer Trivy gates on, so it must carry current OS and JRE security
+# patches. `21-jre-noble` resolves to the latest Temurin 21 JRE on Ubuntu 24.04.
+#
+# A hard patch pin (e.g. 21.0.5_11-jre-jammy) goes stale between releases and
+# accumulates fixable CRITICAL CVEs, which is exactly what failed this build.
+# Rebuilding picks up the current patch level; the Trivy gate in the image stage
+# is what proves the result is clean, so a floating minor tag is verified on
+# every run rather than trusted blindly.
+FROM eclipse-temurin:21-jre-noble
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
