@@ -35,6 +35,32 @@
     <pmd.plugin.version>3.21.2</pmd.plugin.version>
     <spotbugs.plugin.version>4.8.3.1</spotbugs.plugin.version>
     <dependency.check.version>9.2.0</dependency.check.version>
+
+    <!--
+      KNOWN OPEN VULNERABILITY - tomcat-embed-core (see docs/security-notes.md).
+
+      Spring Boot 3.5.16 manages tomcat-embed-core 10.1.55. The container scan
+      reports three fixable CRITICAL vulnerabilities in it:
+
+        CVE-2026-65182  security constraint bypass (improper access control)
+        CVE-2026-65905  authentication bypass via replay in the DIGEST authenticator
+        CVE-2026-68525  unauthorized resource access via FORM authentication bypass
+
+      All three are fixed in Tomcat 10.1.58. That version is TAGGED in the Apache
+      Tomcat repository but is NOT YET PUBLISHED to Maven Central, so overriding
+      `tomcat.version` to 10.1.58 fails dependency resolution:
+        Could not find artifact org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.58
+
+      The override is therefore left OUT rather than pinned to a version that
+      does not resolve. As soon as 10.1.58 lands in Central (or Spring Boot
+      publishes a release that manages >= 10.1.58), set:
+
+        <tomcat.version>10.1.58</tomcat.version>
+
+      and re-run build-deploy; the trivy-report artifact will confirm the image
+      is clean. Do NOT silence this finding with a .trivyignore.
+    -->
+
     <!--
       The NVD API rejects unauthenticated bulk downloads (HTTP 403/404), so the
       dependency-check gate needs a key. CI supplies it from the NVD_API_KEY
