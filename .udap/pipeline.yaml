@@ -79,10 +79,30 @@ stages:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin "$TRIVY_VERSION"
           trivy --version
-      - name: Trivy container scan
+      # Records findings to files first, so the exact CVEs are recoverable from the
+      # run summary and artifacts instead of only surfacing as a non-zero exit code.
+      - name: Trivy scan report
+        run: |
+          mkdir -p reports
+          IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          trivy image --severity CRITICAL --ignore-unfixed --format table \
+            --output reports/trivy-critical.txt "$IMAGE_LC:${{ github.sha }}"
+          trivy image --severity CRITICAL --ignore-unfixed --format json \
+            --output reports/trivy-critical.json "$IMAGE_LC:${{ github.sha }}"
+          echo "### Trivy CRITICAL (fixable) findings" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat reports/trivy-critical.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat reports/trivy-critical.txt
+      - name: Publish Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: reports
+      - name: Trivy gate (fails on fixable CRITICAL)
         run: |
           IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
-          trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE_LC:${{ github.sha }}"
+          trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed --quiet "$IMAGE_LC:${{ github.sha }}"
       - name: Push image
         run: |
           IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
@@ -395,10 +415,30 @@ pipelines:
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
                 | sh -s -- -b /usr/local/bin "$TRIVY_VERSION"
               trivy --version
-          - name: Trivy container scan (fails on fixable CRITICAL)
+          # Records findings to files first, so the exact CVEs are recoverable from
+          # the run summary and artifacts rather than only as a non-zero exit code.
+          - name: Trivy scan report
+            run: |
+              mkdir -p reports
+              IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+              trivy image --severity CRITICAL --ignore-unfixed --format table \
+                --output reports/trivy-critical.txt "$IMAGE_LC:${{ github.sha }}"
+              trivy image --severity CRITICAL --ignore-unfixed --format json \
+                --output reports/trivy-critical.json "$IMAGE_LC:${{ github.sha }}"
+              echo "### Trivy CRITICAL (fixable) findings" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              cat reports/trivy-critical.txt >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              cat reports/trivy-critical.txt
+          - name: Publish Trivy report
+            uses: actions/upload-artifact@v4
+            with:
+              name: trivy-report
+              path: reports
+          - name: Trivy gate (fails on fixable CRITICAL)
             run: |
               IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
-              trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE_LC:${{ github.sha }}"
+              trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed --quiet "$IMAGE_LC:${{ github.sha }}"
           - name: Push image to GHCR
             run: |
               IMAGE_LC="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"

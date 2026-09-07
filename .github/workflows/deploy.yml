@@ -78,10 +78,24 @@ jobs:
     - name: Install Trivy
       run: "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh\
         \ \\\n  | sh -s -- -b /usr/local/bin \"$TRIVY_VERSION\"\ntrivy --version\n"
-    - name: Trivy container scan
+    - name: Trivy scan report
+      run: "mkdir -p reports\nIMAGE_LC=\"$(echo \"$IMAGE\" | tr '[:upper:]' '[:lower:]')\"\
+        \ntrivy image --severity CRITICAL --ignore-unfixed --format table \\\n  --output\
+        \ reports/trivy-critical.txt \"$IMAGE_LC:${{ github.sha }}\"\ntrivy image\
+        \ --severity CRITICAL --ignore-unfixed --format json \\\n  --output reports/trivy-critical.json\
+        \ \"$IMAGE_LC:${{ github.sha }}\"\necho \"### Trivy CRITICAL (fixable) findings\"\
+        \ >> \"$GITHUB_STEP_SUMMARY\"\necho '```' >> \"$GITHUB_STEP_SUMMARY\"\ncat\
+        \ reports/trivy-critical.txt >> \"$GITHUB_STEP_SUMMARY\"\necho '```' >> \"\
+        $GITHUB_STEP_SUMMARY\"\ncat reports/trivy-critical.txt\n"
+    - name: Publish Trivy report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-report
+        path: reports
+    - name: Trivy gate (fails on fixable CRITICAL)
       run: 'IMAGE_LC="$(echo "$IMAGE" | tr ''[:upper:]'' ''[:lower:]'')"
 
-        trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE_LC:${{
+        trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed --quiet "$IMAGE_LC:${{
         github.sha }}"
 
         '
